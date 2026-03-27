@@ -528,14 +528,16 @@ static HSAKMT_STATUS topology_sysfs_get_node_props(uint32_t node_id,
   props.FComputeIdLo = 0;
   props.Capability.ui32.ASICRevision = device->AsicRevision();
   props.Capability.ui32.WatchPointsTotalBits =
-      std::log2(device->WatchPointsNum());
-  props.MaxWavesPerSIMD = device->WavePerCu() / device->SimdPerCu();
+      device->WatchPointsNum() ? std::log2(device->WatchPointsNum()) : 0;
+  props.MaxWavesPerSIMD =
+      device->SimdPerCu() ? device->WavePerCu() / device->SimdPerCu() : 0;
   props.LDSSizeInKB = device->LdsSize() / 1024;
   props.GDSSizeInKB = 0;
   props.WaveFrontSize = device->WavefrontSize();
   props.NumShaderBanks = device->NumShaderEngine();
   props.NumArrays = device->ShaderArrayPerShaderEngine();
-  props.NumCUPerArray = device->ComputeUnitCount() / props.NumArrays;
+  props.NumCUPerArray = props.NumArrays
+                          ? device->ComputeUnitCount() / props.NumArrays : 0;
   props.NumSIMDPerCU = device->SimdPerCu();
   props.MaxSlotsScratchCU = device->MaxScratchSlotsPerCu();
   props.VendorId = 0x1002;
@@ -592,6 +594,18 @@ static HSAKMT_STATUS topology_sysfs_get_node_props(uint32_t node_id,
   props.EngineId.ui32.Minor = device->Minor();
   props.EngineId.ui32.Stepping = device->Stepping();
 
+  /* GFX version should already be populated by ParseDeviceInfo() via
+   * HSA_OVERRIDE_GFX_VERSION or device-specific detection.  Fall back to
+   * the topology-level override as a last resort; log an error if still 0. */
+  if (!props.EngineId.ui32.Major) {
+    if (props.OverrideEngineId.ui32.Major) {
+      props.EngineId = props.OverrideEngineId;
+      pr_warn("GFX version from HSA_OVERRIDE_GFX_VERSION\n");
+    } else {
+      pr_err("GFX version is 0 — set HSA_OVERRIDE_GFX_VERSION\n");
+    }
+  }
+
   snprintf((char *)props.AMDName, sizeof(props.AMDName) - 1, "GFX%06x",
            HSA_GET_GFX_VERSION_FULL(props.EngineId.ui32));
 
@@ -603,9 +617,8 @@ static HSAKMT_STATUS topology_sysfs_get_node_props(uint32_t node_id,
   props.SGPRSizePerCU = SGPR_SIZE_PER_CU;
   props.VGPRSizePerCU = get_vgpr_size_per_cu(props.EngineId);
 
-  if (props.NumFComputeCores)
-    assert(props.EngineId.ui32.Major &&
-           "HSA_OVERRIDE_GFX_VERSION may be needed");
+  if (props.NumFComputeCores && !props.EngineId.ui32.Major)
+    pr_err("GFX version still unknown - set HSA_OVERRIDE_GFX_VERSION\n");
 
   return ret;
 }

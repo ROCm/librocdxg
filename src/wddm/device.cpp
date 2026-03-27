@@ -549,8 +549,10 @@ NTSTATUS WDDMCreateDevices(std::vector<WDDMDevice *> &devices)
 
     ret = WDDMQueryAdapter(info[i].hAdapter, KMTQAITYPE_PHYSICALADAPTERDEVICEIDS,
 			   &query, sizeof(query));
-    if (ret != STATUS_SUCCESS)
-      goto err_out1;
+    if (ret != STATUS_SUCCESS) {
+      pr_debug("adapter %d query failed (0x%x), skipping\n", i, ret);
+      continue; /* non-fatal: skip adapters that cannot be queried */
+    }
 
     if (query.DeviceIds.VendorID != 0x1002)
       continue;
