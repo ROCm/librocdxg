@@ -127,6 +127,9 @@ HSAKMT_STATUS WaitOnMultipleEvents(EventState *states[], HSAuint32 num_events,
   const bool infinite = milliseconds == HSA_EVENTTIMEOUT_INFINITE;
 
   if (wait_on_all) {
+    // Delay auto-reset consumption until every event has been observed so a
+    // timed out aggregate wait does not clear a signal that another waiter
+    // still needs to see.
     for (HSAuint32 i = 0; i < num_events; i++) {
       if (!states[i])
         return HSAKMT_STATUS_INVALID_HANDLE;

@@ -69,6 +69,8 @@ bool ApplyAdapterInfoFallback(thunk_proxy::DeviceInfo &device_info) {
   if (!fallback)
     return false;
 
+  // Only backfill fields that the adapter query left unset so parsed metadata
+  // remains authoritative whenever the runtime already supplied it.
   bool used_fallback = false;
 
   if (device_info.major == 0) {
