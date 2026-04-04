@@ -118,6 +118,7 @@ set ( ROCDXG_SRC "src/debug.cpp"
                  "src/hsakmtmodel.cpp"
                  "src/dxcore_loader.cpp"
                  "src/ais.cpp"
+                 "src/wddm/adapter_policy.cpp"
                  "src/wddm/device.cpp"
                  "src/wddm/gpu_memory.cpp"
                  "src/wddm/va_mgr.cpp"
@@ -137,8 +138,9 @@ target_include_directories( ${ROCDXG_TARGET}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   PRIVATE
-  ${WIN_SDK}
   ${CMAKE_CURRENT_SOURCE_DIR}/src )
+
+target_include_directories(${ROCDXG_TARGET} SYSTEM PRIVATE ${WIN_SDK})
 
 add_compile_definitions(LINUX __AMD64__ LITTLEENDIAN_CPU HSA_LARGE_MODEL)
 

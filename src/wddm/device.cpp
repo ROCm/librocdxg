@@ -42,6 +42,8 @@
 
 #include <cinttypes>
 #include <bitset>
+#include <cstdlib>
+#include <cstring>
 
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
@@ -53,6 +55,7 @@
 #include "impl/wddm/types.h"
 #include "impl/wddm/device.h"
 #include "impl/wddm/queue.h"
+#include "wddm/adapter_policy.h"
 
 namespace wsl {
 namespace thunk {
@@ -524,6 +527,12 @@ uint32_t WDDMDevice::LdsBlocks(const hsa_kernel_dispatch_packet_t *pkt) {
 NTSTATUS WDDMCreateDevices(std::vector<WDDMDevice *> &devices)
 {
   bool supported = false;
+  const char *gfx_override = getenv("HSA_OVERRIDE_GFX_VERSION");
+  const bool has_gfx_override =
+      adapter_policy::HasValidGfxOverrideValue(gfx_override);
+  const bool enable_unsupported_adapters =
+      adapter_policy::IsEnabledValue(
+          getenv("LIBROCDXG_ENABLE_UNSUPPORTED_ADAPTERS"));
   D3DKMT_ENUMADAPTERS2 args = {0};
   NTSTATUS ret = DXCORE_CALL(D3DKMTEnumAdapters2(&args));
   if (ret != STATUS_SUCCESS)
@@ -555,6 +564,18 @@ NTSTATUS WDDMCreateDevices(std::vector<WDDMDevice *> &devices)
 
     supported = thunk_proxy::QueryAdapterSupported(query.DeviceIds.DeviceID);
 
+    if (!supported &&
+        adapter_policy::ShouldAllowUnsupportedAdapter(
+            query.DeviceIds.VendorID, query.DeviceIds.DeviceID,
+            has_gfx_override, enable_unsupported_adapters)) {
+      pr_warn("Allowing unsupported AMD adapter device_id=0x%04x because %s is set.\n",
+              query.DeviceIds.DeviceID,
+              adapter_policy::UnsupportedAdapterReason(
+                  query.DeviceIds.DeviceID, has_gfx_override,
+                  enable_unsupported_adapters));
+      supported = true;
+    }
+
     if (supported) {
       auto device = new WDDMDevice(
         info[i].hAdapter, info[i].AdapterLuid, devices.size() + 1);
@@ -582,6 +603,16 @@ bool WDDMDevice::ParseDeviceInfo() {
   ret = thunk_proxy::ParseAdapterInfo(adapter_, &device_info_);
   if (!ret)
     return false;
+
+  if (adapter_policy::ApplyAdapterInfoFallback(device_info_)) {
+    const auto *fallback =
+        adapter_policy::FindAdapterInfoFallback(device_info_.device_id);
+    if (fallback) {
+      pr_warn("Using fallback adapter info for device_id=0x%04x as gfx%d%d%d with %u CUs.\n",
+              fallback->device_id, fallback->major, fallback->minor,
+              fallback->stepping, fallback->compute_unit_count);
+    }
+  }
 
   return true;
 }
