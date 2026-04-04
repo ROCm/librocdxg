@@ -52,6 +52,7 @@ list( PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules" )
 ## Include common cmake modules
 include ( utils )
 include ( GNUInstallDirs )
+include ( CTest )
 
 ## Setup the package version.
 get_version ( "${ROCDXG_VERSION}" )
@@ -315,3 +316,7 @@ cpack_add_component(binary
 cpack_add_component(dev
   DISPLAY_NAME "Development"
   DESCRIPTION "ROCDXG development files (pkgconfig and cmake)")
+
+if (BUILD_TESTING)
+  add_subdirectory(tests)
+endif ()

@@ -1,7 +1,10 @@
 #ifndef LIBROCDXG_WDDM_ADAPTER_POLICY_H
 #define LIBROCDXG_WDDM_ADAPTER_POLICY_H
 
-#include "librocdxg.h"
+#include <cstdint>
+
+#include "impl/wddm/types.h"
+#include "impl/thunk_proxy/thunk_proxy.h"
 
 namespace wsl {
 namespace thunk {
