@@ -7,13 +7,21 @@ namespace wsl {
 namespace thunk {
 namespace adapter_policy {
 
-const AdapterInfoFallback *FindAdapterInfoFallback(uint32_t device_id) {
-  static const AdapterInfoFallback kFallbacks[] = {
-      {0x73E3, 10, 3, 2, 28},
-      {0x73EF, 10, 3, 2, 28},
-  };
+namespace {
 
-  for (const auto &fallback : kFallbacks) {
+// Known WSL adapter parse gaps. These defaults only backfill zero-valued
+// metadata returned by ParseAdapterInfo for adapters that the user explicitly
+// opted into. The override target remains user-controlled through
+// HSA_OVERRIDE_GFX_VERSION.
+constexpr AdapterInfoFallback kKnownAdapterInfoFallbacks[] = {
+    {0x73E3, 10, 3, 2, 28},
+    {0x73EF, 10, 3, 2, 28},
+};
+
+} // namespace
+
+const AdapterInfoFallback *FindAdapterInfoFallback(uint32_t device_id) {
+  for (const auto &fallback : kKnownAdapterInfoFallbacks) {
     if (fallback.device_id == device_id)
       return &fallback;
   }
@@ -46,6 +54,8 @@ bool ShouldAllowUnsupportedAdapter(uint32_t vendor_id, uint32_t device_id,
   if (vendor_id != 0x1002)
     return false;
 
+  // Keep explicit opt-in scoped to adapters with known metadata gaps instead
+  // of admitting arbitrary unsupported devices into enumeration.
   if (FindAdapterInfoFallback(device_id) == nullptr)
     return false;
 
