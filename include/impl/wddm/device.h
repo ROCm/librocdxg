@@ -44,7 +44,9 @@
 #define _WSL_INC_WDDM_DEVICE_H_
 
 #include <cassert>
+#include <cstdio>
 #include <ntstatus.h>
+#include <strings.h>
 
 #include <atomic>
 #include <memory>
@@ -239,6 +241,111 @@ private:
 };
 
 NTSTATUS WDDMCreateDevices(std::vector<WDDMDevice *> &devices);
+
+namespace adapter_policy {
+
+struct AdapterInfoFallback {
+  uint32_t device_id;
+  int major;
+  int minor;
+  int stepping;
+  uint32_t compute_unit_count;
+};
+
+// Known WSL adapter parse gaps. These defaults only backfill zero-valued
+// metadata returned by ParseAdapterInfo for adapters that the user explicitly
+// opted into. The override target remains user-controlled through
+// HSA_OVERRIDE_GFX_VERSION.
+inline constexpr AdapterInfoFallback kKnownAdapterInfoFallbacks[] = {
+    {0x73E3, 10, 3, 2, 28},
+    {0x73EF, 10, 3, 2, 28},
+};
+
+inline const AdapterInfoFallback *FindAdapterInfoFallback(uint32_t device_id) {
+  for (const auto &fallback : kKnownAdapterInfoFallbacks) {
+    if (fallback.device_id == device_id)
+      return &fallback;
+  }
+
+  return nullptr;
+}
+
+inline bool HasValidGfxOverrideValue(const char *value) {
+  if (!value || !value[0])
+    return false;
+
+  char dummy = '\0';
+  uint32_t major = 0, minor = 0, step = 0;
+  return (std::sscanf(value, "%u.%u.%u%c", &major, &minor, &step, &dummy) ==
+          3) &&
+         (major <= 63 && minor <= 255 && step <= 255);
+}
+
+inline bool IsEnabledValue(const char *value) {
+  if (!value || !value[0])
+    return false;
+
+  return !strcasecmp(value, "1") || !strcasecmp(value, "true") ||
+         !strcasecmp(value, "yes") || !strcasecmp(value, "on");
+}
+
+inline bool ShouldAllowUnsupportedAdapter(uint32_t vendor_id,
+                                          uint32_t device_id,
+                                          bool has_gfx_override,
+                                          bool enable_unsupported_adapters) {
+  if (vendor_id != 0x1002)
+    return false;
+
+  // Keep explicit opt-in scoped to adapters with known metadata gaps instead
+  // of admitting arbitrary unsupported devices into enumeration.
+  if (FindAdapterInfoFallback(device_id) == nullptr)
+    return false;
+
+  if (enable_unsupported_adapters)
+    return true;
+
+  return has_gfx_override;
+}
+
+inline const char *UnsupportedAdapterReason(uint32_t device_id,
+                                            bool has_gfx_override,
+                                            bool enable_unsupported_adapters) {
+  if (has_gfx_override && FindAdapterInfoFallback(device_id) != nullptr)
+    return "HSA_OVERRIDE_GFX_VERSION";
+  if (enable_unsupported_adapters)
+    return "LIBROCDXG_ENABLE_UNSUPPORTED_ADAPTERS";
+  return nullptr;
+}
+
+inline bool ApplyAdapterInfoFallback(thunk_proxy::DeviceInfo &device_info) {
+  const auto *fallback = FindAdapterInfoFallback(device_info.device_id);
+  if (!fallback)
+    return false;
+
+  // Only backfill fields that the adapter query left unset so parsed metadata
+  // remains authoritative whenever the runtime already supplied it.
+  bool used_fallback = false;
+
+  if (device_info.major == 0) {
+    device_info.major = fallback->major;
+    used_fallback = true;
+  }
+  if (device_info.minor == 0) {
+    device_info.minor = fallback->minor;
+    used_fallback = true;
+  }
+  if (device_info.stepping == 0) {
+    device_info.stepping = fallback->stepping;
+    used_fallback = true;
+  }
+  if (device_info.compute_unit_count == 0) {
+    device_info.compute_unit_count = fallback->compute_unit_count;
+    used_fallback = true;
+  }
+  return used_fallback;
+}
+
+} // namespace adapter_policy
 
 } // namespace thunk
 } // namespace wsl

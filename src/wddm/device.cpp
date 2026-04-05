@@ -55,7 +55,6 @@
 #include "impl/wddm/types.h"
 #include "impl/wddm/device.h"
 #include "impl/wddm/queue.h"
-#include "wddm/adapter_policy.h"
 
 namespace wsl {
 namespace thunk {

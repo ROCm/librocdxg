@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "wddm/adapter_policy.h"
+#include "impl/wddm/device.h"
 
 namespace {
 
