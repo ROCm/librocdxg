@@ -127,6 +127,131 @@ docker run -it  \
     rocm/pytorch:latest
 ```
 
+## Build with TheRock Wheels
+
+The quickstart above assumes a traditional ROCm installation under `/opt/rocm`.
+When ROCm is installed from TheRock Python wheels, the ROCm SDK is rooted inside
+the active Python environment instead. Use the `rocm-sdk` CLI from that
+environment to discover the correct paths and install `librocdxg` into the
+wheel-provided SDK tree.
+
+### 1. Install and initialize the TheRock ROCm wheels
+
+Create or activate the Python environment that contains the TheRock wheels:
+
+```bash
+python3 -m venv ~/rocm-venv
+source ~/rocm-venv/bin/activate
+python -m pip install --upgrade pip
+
+# Install the TheRock wheels for your ROCm release, channel, and GPU target.
+# Find the current pip index URL in:
+# https://github.com/ROCm/TheRock/blob/main/RELEASES.md
+export THEROCK_WHEEL_INDEX_URL='<TheRock wheel index URL>'
+python -m pip install --pre --index-url "${THEROCK_WHEEL_INDEX_URL}" "rocm[devel,libraries]"
+
+# Expand development payloads if they have not already been initialized.
+rocm-sdk init
+```
+
+At minimum, the environment must provide the `rocm-sdk` command, the ROCm
+development payload, and the library wheels for the target GPU family.
+
+### 2. Confirm SDK paths
+
+```bash
+source ~/rocm-venv/bin/activate
+
+rocm-sdk path --root
+rocm-sdk path --cmake
+rocm-sdk path --bin
+```
+
+The LLVM toolchain is under the SDK root:
+
+```bash
+export ROCM_ROOT="$(rocm-sdk path --root)"
+export ROCM_CMAKE="$(rocm-sdk path --cmake)"
+export ROCM_BIN="$(rocm-sdk path --bin)"
+export LLVM_BIN="${ROCM_ROOT}/lib/llvm/bin"
+
+"${LLVM_BIN}/clang++" --version
+```
+
+### 3. Build and install librocdxg into the wheel SDK
+
+Run these commands from the `librocdxg` source directory:
+
+```bash
+source ~/rocm-venv/bin/activate
+
+export ROCM_ROOT="$(rocm-sdk path --root)"
+export ROCM_CMAKE="$(rocm-sdk path --cmake)"
+export LLVM_BIN="${ROCM_ROOT}/lib/llvm/bin"
+
+# Set the Windows SDK path. Adjust the version number if needed.
+export WIN_SDK='/mnt/c/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/shared'
+
+cmake -S . -B build-therock \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DWIN_SDK="${WIN_SDK}" \
+  -DCMAKE_C_COMPILER="${LLVM_BIN}/clang" \
+  -DCMAKE_CXX_COMPILER="${LLVM_BIN}/clang++" \
+  -DCMAKE_PREFIX_PATH="${ROCM_CMAKE};${ROCM_ROOT}" \
+  -DCMAKE_INSTALL_PREFIX="${ROCM_ROOT}" \
+  -DCMAKE_INSTALL_LIBDIR=lib
+
+cmake --build build-therock -j "$(nproc)"
+cmake --install build-therock
+```
+
+This installs `librocdxg.so` into `${ROCM_ROOT}/lib`, next to the HSA runtime
+provided by the wheels. No `sudo make install` step is required.
+
+### 4. Validate rocminfo
+
+Keep the TheRock environment active and enable DXG detection:
+
+```bash
+source ~/rocm-venv/bin/activate
+
+export ROCM_BIN="$(rocm-sdk path --bin)"
+export HSA_ENABLE_DXG_DETECTION=1
+"${ROCM_BIN}/rocminfo"
+```
+
+Expected result:
+
+```bash
+[...]
+*******
+Agent 2
+*******
+  Name:                    gfx1201
+  Marketing Name:          AMD Radeon RX 9070 XT
+  Vendor Name:             AMD
+  Device Type:             GPU
+  [...]
+[...]
+```
+
+If another application is launched outside the activated Python environment,
+point the dynamic loader at the wheel SDK and the WSL DXCore library. Resolve
+`ROCM_ROOT` from an activated TheRock environment first:
+
+```bash
+export ROCM_ROOT="$(rocm-sdk path --root)"
+export ROCM_BIN="$(rocm-sdk path --bin)"
+export LD_LIBRARY_PATH="${ROCM_ROOT}/lib:/usr/lib/wsl/lib:${ROCM_ROOT}/lib/rocm_sysdeps/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+export HSA_ENABLE_DXG_DETECTION=1
+```
+
+To confirm that the HSA runtime is loading this build of `librocdxg`, run:
+
+```bash
+LD_DEBUG=libs,files "${ROCM_BIN}/rocminfo" 2>&1 | grep -E 'librocdxg|libdxcore'
+```
+
 ## 7. Known Issues and Limitations
 
 - The ROCm-supported version of JAX is not currently enabled or validated under WSL. As a result, JAX workloads on WSL may fail to install, initialize, or execute correctly.
