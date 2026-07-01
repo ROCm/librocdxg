@@ -310,6 +310,17 @@ inline ErrorCode WaitForSynchronizationObjectFromCpu(
   return TranslateNtStatus(DXCORE_CALL(D3DKMTWaitForSynchronizationObjectFromCpu(args)));
 }
 
+inline bool SignalSynchronizationObjectFromCpuAvailable() {
+  return DXCORE_CALL(D3DKMTSignalSynchronizationObjectFromCpu) != nullptr;
+}
+
+inline ErrorCode SignalSynchronizationObjectFromCpu(
+    SignalSynchronizationObjectFromCpuArgs *args) {
+  if (DXCORE_CALL(D3DKMTSignalSynchronizationObjectFromCpu) == nullptr)
+    return ErrorCode::UnSupported;
+  return TranslateNtStatus(DXCORE_CALL(D3DKMTSignalSynchronizationObjectFromCpu(args)));
+}
+
 inline ErrorCode CreateSynchronizationObject2(CreateSynchronizationObject2Args *args) {
   return TranslateNtStatus(DXCORE_CALL(D3DKMTCreateSynchronizationObject2(args)));
 }

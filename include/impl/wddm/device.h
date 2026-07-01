@@ -47,7 +47,10 @@
 #include <ntstatus.h>
 
 #include <atomic>
+#include <bitset>
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 
 #include "shared/include/d3dkmt_types.h"
 #include "shared/include/device.h"
@@ -141,6 +144,18 @@ public:
   bool CreateSyncobj(D3DKMT_HANDLE *handle, uint64_t **addr);
   void DestroySyncobj(D3DKMT_HANDLE handle);
 
+  // HSA event support.  Each event is backed by an eventfd-bound
+  // CPU_NOTIFICATION syncobject signaled by the host KMD on GPU completion.
+  static constexpr uint32_t kNumberOfHsaEvents = 1024;
+  static constexpr uint32_t kAqlPayloadId = 1u << 24;
+
+  bool CreateCpuEventSyncobj(int efd, D3DKMT_HANDLE *handle);
+  bool CpuSignal(const D3DKMT_HANDLE *syncobjs, uint64_t *value, int count);
+  uint32_t RegisterEvent(uint32_t type, D3DKMT_HANDLE syncobj, uint64_t *mailbox);
+  bool UnregisterEvent(uint32_t event_id, D3DKMT_HANDLE syncobj);
+  static HSAKMT_STATUS WaitOnMultipleEvents(HsaEvent *events[], uint32_t num_elems,
+                                            bool wait_all, uint32_t msec);
+
   bool CreateQueue(WDDMQueue *queue);
   void DestroyQueue(WDDMQueue *queue);
   bool CreateHwQueue(WDDMQueue *queue);
@@ -214,6 +229,9 @@ private:
   uint32_t cmdbuf_aql_frame_size_;
   static const uint32_t cmdbuf_aql_frame_num_;
   uint32_t node_id_;
+
+  std::mutex event_mutex_;
+  std::bitset<kNumberOfHsaEvents> alloced_events_;
   //CmdUtil cmd_util;
 };
 

@@ -36,6 +36,7 @@ DxcoreLoader::DxcoreLoader()
     , pfn_D3DKMTWaitForSynchronizationObjectFromGpu(nullptr)
     , pfn_D3DKMTSignalSynchronizationObjectFromGpu(nullptr)
     , pfn_D3DKMTWaitForSynchronizationObjectFromCpu(nullptr)
+    , pfn_D3DKMTSignalSynchronizationObjectFromCpu(nullptr)
     , pfn_D3DKMTQueryClockCalibration(nullptr)
     , pfn_D3DKMTMakeResident(nullptr)
     , pfn_D3DKMTEvict(nullptr)
@@ -134,6 +135,8 @@ bool DxcoreLoader::LoadDxcoreApis() {
     // WSL2 dxgkrnl-specific APIs — may not be present on Windows; dlsym failure is non-fatal
     DXCORE_PFN(D3DKMTEnumProcesses) = (DXCORE_DEF(D3DKMTEnumProcesses)*)dlsym(dxcore_handle_, "D3DKMTEnumProcesses");
     DXCORE_PFN(D3DKMTQueryVideoMemoryInfo) = (DXCORE_DEF(D3DKMTQueryVideoMemoryInfo)*)dlsym(dxcore_handle_, "D3DKMTQueryVideoMemoryInfo");
+    // Used for CPU-side signalling of HSA event monitored fences; non-fatal if absent.
+    DXCORE_PFN(D3DKMTSignalSynchronizationObjectFromCpu) = (DXCORE_DEF(D3DKMTSignalSynchronizationObjectFromCpu)*)dlsym(dxcore_handle_, "D3DKMTSignalSynchronizationObjectFromCpu");
 
     #undef LOAD_DXCORE_API
 

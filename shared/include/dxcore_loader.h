@@ -78,6 +78,7 @@ public:
     typedef NTSTATUS (DXCORE_DEF(D3DKMTWaitForSynchronizationObjectFromGpu))(void* args);
     typedef NTSTATUS (DXCORE_DEF(D3DKMTSignalSynchronizationObjectFromGpu))(void* args);
     typedef NTSTATUS (DXCORE_DEF(D3DKMTWaitForSynchronizationObjectFromCpu))(void* args);
+    typedef NTSTATUS (DXCORE_DEF(D3DKMTSignalSynchronizationObjectFromCpu))(void* args);
     typedef NTSTATUS (DXCORE_DEF(D3DKMTQueryClockCalibration))(void* args);
     typedef NTSTATUS (DXCORE_DEF(D3DKMTMakeResident))(void* args);
     typedef NTSTATUS (DXCORE_DEF(D3DKMTEvict))(void* args);
@@ -124,6 +125,7 @@ public:
     DXCORE_DEF(D3DKMTWaitForSynchronizationObjectFromGpu)* DXCORE_PFN(D3DKMTWaitForSynchronizationObjectFromGpu);
     DXCORE_DEF(D3DKMTSignalSynchronizationObjectFromGpu)* DXCORE_PFN(D3DKMTSignalSynchronizationObjectFromGpu);
     DXCORE_DEF(D3DKMTWaitForSynchronizationObjectFromCpu)* DXCORE_PFN(D3DKMTWaitForSynchronizationObjectFromCpu);
+    DXCORE_DEF(D3DKMTSignalSynchronizationObjectFromCpu)* DXCORE_PFN(D3DKMTSignalSynchronizationObjectFromCpu);
     DXCORE_DEF(D3DKMTQueryClockCalibration)* DXCORE_PFN(D3DKMTQueryClockCalibration);
     DXCORE_DEF(D3DKMTMakeResident)* DXCORE_PFN(D3DKMTMakeResident);
     DXCORE_DEF(D3DKMTEvict)* DXCORE_PFN(D3DKMTEvict);

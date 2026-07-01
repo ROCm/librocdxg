@@ -46,6 +46,11 @@
 #include <linux/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <poll.h>
+#include <cerrno>
+#include <chrono>
+#include <thread>
+#include <vector>
 #include "shared/include/status.h"
 #include "shared/include/d3dkmt_types.h"
 #include "shared/include/platform.h"
@@ -54,6 +59,7 @@
 #include "shared/include/thunk_proxy/thunk_proxy.h"
 #include "shared/include/thunks.h"
 #include "impl/wddm/device.h"
+#include "impl/wddm/event.h"
 #include "impl/wddm/queue.h"
 #include "shared/include/utils.h"
 
@@ -340,6 +346,158 @@ void WDDMDevice::DestroySyncobj(D3DKMT_HANDLE handle) {
   ErrorCode ret = dx::DestroySynchronizationObject(&args);
   if (ret != ErrorCode::Success)
     pr_err("fail %d\n", static_cast<int>(ret));
+}
+
+bool WDDMDevice::CreateCpuEventSyncobj(int efd, D3DKMT_HANDLE *handle) {
+  // CPU_NOTIFICATION syncobj bound to a guest eventfd. SignalByKmd lets the
+  // host AMD KMD signal it on GPU completion; dxgkrnl converts the Event field
+  // into an eventfd_ctx and bumps it, waking a guest poll() waiter.
+  D3DKMT_CREATESYNCHRONIZATIONOBJECT2 args = {0};
+  args.hDevice = DeviceHandle();
+  args.Info.Type = D3DDDI_CPU_NOTIFICATION;
+  args.Info.Flags.SignalByKmd = 1;
+  args.Info.CPUNotification.Event =
+      reinterpret_cast<HANDLE>(static_cast<intptr_t>(efd));
+
+  ErrorCode ret = dx::CreateSynchronizationObject2(&args);
+  if (ret == ErrorCode::Success) {
+    *handle = args.hSyncObject;
+    return true;
+  }
+
+  pr_err("fail %d\n", static_cast<int>(ret));
+  return false;
+}
+
+uint32_t WDDMDevice::RegisterEvent(uint32_t type, D3DKMT_HANDLE syncobj,
+				   uint64_t *mailbox) {
+  (void)type;
+  // CPU_NOTIFICATION events are KMD-signaled; there is no GPU mailbox VA.
+  *mailbox = 0;
+
+  std::lock_guard<std::mutex> lock(event_mutex_);
+  // Start from 1; 0 is the default state and can't be identified in KMD.
+  for (uint32_t event_id = 1; event_id < kNumberOfHsaEvents; event_id++) {
+    if (alloced_events_.test(event_id))
+      continue;
+
+    // Bind {event_id, syncobj} in the host AMD KMD via the MS CPUEVENTUSAGE
+    // known-escape so the GPU interrupt path can signal this CPU_NOTIFICATION
+    // syncobj on dispatch completion.
+    D3DDDI_DRIVERESCAPE_CPUEVENTUSAGE usage;
+    memset(&usage, 0, sizeof(usage));
+    usage.EscapeType  = D3DDDI_DRIVERESCAPETYPE_CPUEVENTUSAGE;
+    usage.hSyncObject = syncobj;
+    usage.hKmdCpuEvent = 0;
+    usage.Usage[0]    = event_id;
+
+    D3DKMT_ESCAPE d3dkmt_escape;
+    memset(&d3dkmt_escape, 0, sizeof(d3dkmt_escape));
+    d3dkmt_escape.hAdapter              = adapter_;
+    d3dkmt_escape.hDevice               = DeviceHandle();
+    d3dkmt_escape.hContext              = 0;
+    d3dkmt_escape.Type                  = D3DKMT_ESCAPE_DRIVERPRIVATE;
+    d3dkmt_escape.Flags.DriverKnownEscape = 1;
+    d3dkmt_escape.pPrivateDriverData    = &usage;
+    d3dkmt_escape.PrivateDriverDataSize = sizeof(usage);
+    ErrorCode status = dx::Escape(adapter_, DeviceHandle(), &d3dkmt_escape);
+    if (status != ErrorCode::Success) {
+      pr_debug("cpueventusage escape unavailable (status %d); CPU-only event\n",
+	       static_cast<int>(status));
+    }
+
+    alloced_events_.set(event_id);
+    return event_id | kAqlPayloadId;
+  }
+
+  pr_err("out of HSA event slots\n");
+  return 0;
+}
+
+bool WDDMDevice::UnregisterEvent(uint32_t event_id, D3DKMT_HANDLE syncobj) {
+  (void)syncobj;
+  // Strip the AQL payload bit to recover the raw event id.
+  event_id &= kAqlPayloadId - 1;
+
+  std::lock_guard<std::mutex> lock(event_mutex_);
+  if (event_id == 0 || event_id >= kNumberOfHsaEvents ||
+      !alloced_events_.test(event_id))
+    return true;
+
+  alloced_events_.reset(event_id);
+
+  // The KMD-side {event_id, syncobj} binding is released when the
+  // CPU_NOTIFICATION syncobj is destroyed (DestroySyncobj), so no explicit
+  // unbind escape is required here.
+  return true;
+}
+
+HSAKMT_STATUS WDDMDevice::WaitOnMultipleEvents(HsaEvent *events[],
+					       uint32_t num_elems,
+					       bool wait_all, uint32_t msec) {
+  if (events == nullptr)
+    return HSAKMT_STATUS_INVALID_HANDLE;
+  if (num_elems == 0)
+    return HSAKMT_STATUS_SUCCESS;
+
+  std::vector<struct pollfd> pfds(num_elems);
+  std::vector<bool> signaled(num_elems, false);
+  for (uint32_t i = 0; i < num_elems; i++) {
+    Event *event = Event::FromHsaEvent(events[i]);
+    if (event == nullptr)
+      return HSAKMT_STATUS_INVALID_HANDLE;
+    pfds[i].fd = event->Efd();
+    pfds[i].events = POLLIN;
+    pfds[i].revents = 0;
+  }
+
+  auto done = [&]() -> bool {
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < num_elems; i++)
+      if (signaled[i])
+	count++;
+    return wait_all ? (count == num_elems) : (count > 0);
+  };
+
+  constexpr uint32_t kInfinite = 0xFFFFFFFF;
+  const bool infinite = (msec == kInfinite);
+  auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(msec);
+
+  while (true) {
+    int timeout_ms = -1;
+    if (!infinite) {
+      auto now = std::chrono::steady_clock::now();
+      if (now >= deadline)
+	return done() ? HSAKMT_STATUS_SUCCESS : HSAKMT_STATUS_WAIT_TIMEOUT;
+      timeout_ms = static_cast<int>(
+	  std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now)
+	      .count());
+    }
+
+    for (uint32_t i = 0; i < num_elems; i++)
+      pfds[i].revents = 0;
+
+    int ret = poll(pfds.data(), num_elems, timeout_ms);
+    if (ret < 0) {
+      if (errno == EINTR)
+	continue;
+      pr_err("poll fail %d\n", errno);
+      return HSAKMT_STATUS_WAIT_FAILURE;
+    }
+    if (ret == 0)
+      return done() ? HSAKMT_STATUS_SUCCESS : HSAKMT_STATUS_WAIT_TIMEOUT;
+
+    // An eventfd stays readable until Reset() drains it, so accumulate the set
+    // of signaled events across poll() iterations to honor wait_all.
+    for (uint32_t i = 0; i < num_elems; i++) {
+      if (pfds[i].revents & (POLLIN | POLLERR | POLLHUP))
+	signaled[i] = true;
+    }
+
+    if (done())
+      return HSAKMT_STATUS_SUCCESS;
+  }
 }
 
 void WDDMDevice::InitCmdbufInfo(void) {
