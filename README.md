@@ -141,6 +141,7 @@ docker run -it  \
 - JAX is supported from version 0.9.1 onwards.
 - AMD-SMI currently provides a limited set of features on WSL2. The source code is available in the develop branch, and a formal release plan is under development.
 - Debugging/Profiling: `ROCm-profiler`, `Debugger` are not supported.
+- vLLM can fail during initialization on WSL2 when using the V2 model runner because pinned memory is disabled by default under WSL, while the V2 runner requires pinned memory/UVA support. This may result in errors such as `RuntimeError: UVA is not available`. The issue is addressed by the vLLM fix in [vLLM PR #41496](https://github.com/vllm-project/vllm/pull/41496).
 
 ## WSL Compatibility Matrix
 - Windows 11
