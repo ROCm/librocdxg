@@ -67,6 +67,7 @@ hsaKmtGetTileConfig;
 hsaKmtQueryPointerInfo;
 hsaKmtSetMemoryUserData;
 hsaKmtGetQueueInfo;
+hsaKmtGetKernelQueueId;
 hsaKmtAllocQueueGWS;
 hsaKmtRuntimeEnable;
 hsaKmtRuntimeDisable;
