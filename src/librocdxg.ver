@@ -74,6 +74,7 @@ hsaKmtRuntimeDisable;
 hsaKmtCheckRuntimeDebugSupport;
 hsaKmtGetRuntimeCapabilities;
 hsaKmtGetCoreRuntimeInfo;
+hsaKmtGetCoreDeviceInfo;
 hsaKmtDebugTrapIoctl;
 hsaKmtSPMAcquire;
 hsaKmtSPMRelease;
