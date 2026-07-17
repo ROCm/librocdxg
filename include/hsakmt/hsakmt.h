@@ -850,6 +850,15 @@ hsaKmtGetRuntimeCapabilities(
     );
 
 /**
+  Get core runtime info from KFD.
+*/
+HSAKMT_STATUS
+HSAKMTAPI
+hsaKmtGetCoreRuntimeInfo(
+    struct kfd_runtime_info *runtime_info // OUT
+    );
+
+/**
   Enable debug trap.
 */
 HSAKMT_STATUS

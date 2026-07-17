@@ -73,6 +73,7 @@ hsaKmtRuntimeEnable;
 hsaKmtRuntimeDisable;
 hsaKmtCheckRuntimeDebugSupport;
 hsaKmtGetRuntimeCapabilities;
+hsaKmtGetCoreRuntimeInfo;
 hsaKmtDebugTrapIoctl;
 hsaKmtSPMAcquire;
 hsaKmtSPMRelease;
