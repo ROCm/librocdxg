@@ -859,6 +859,16 @@ hsaKmtGetCoreRuntimeInfo(
     );
 
 /**
+  Get core device info from KFD.
+*/
+HSAKMT_STATUS
+HSAKMTAPI
+hsaKmtGetCoreDeviceInfo(
+    HSAuint32 gpu_id, // IN
+    struct kfd_dbg_device_info_entry *device_info // OUT
+    );
+
+/**
   Enable debug trap.
 */
 HSAKMT_STATUS
