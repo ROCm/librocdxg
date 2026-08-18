@@ -630,6 +630,8 @@ static HSAKMT_STATUS topology_sysfs_get_node_props(uint32_t node_id,
     props.Capability.ui32.SVMAPISupported = 0;
   props.Capability.ui32.DoorbellType = 2;
 
+  props.Capability2.ui32.AqlEmulationPm4_ = 1;
+
   /* Get VGPR/SGPR size in byte per CU */
   props.SGPRSizePerCU = SGPR_SIZE_PER_CU;
   props.VGPRSizePerCU = get_vgpr_size_per_cu(props.EngineId);
