@@ -168,6 +168,12 @@ target_compile_definitions(${ROCDXG_TARGET} PRIVATE ROCDXG_VERSION="${ROCDXG_VER
 add_subdirectory(shared)
 target_link_libraries(${ROCDXG_TARGET} PRIVATE thunk_proxy dxg_shared)
 
+option(BUILD_TESTS "Build unit tests" OFF)
+if(BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
+
 set_property(TARGET ${ROCDXG_TARGET} PROPERTY LINK_FLAGS ${ROCDXG_LINK_FLAGS})
 
 ## Ensure runtime can locate ROCm libs from /opt/rocm/lib via RPATH

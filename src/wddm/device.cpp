@@ -55,6 +55,7 @@
 #include "shared/include/thunks.h"
 #include "impl/wddm/device.h"
 #include "impl/wddm/queue.h"
+#include "wddm/vram_budget.h"
 #include "shared/include/utils.h"
 
 namespace wsl {
@@ -98,12 +99,30 @@ ErrorCode WDDMDevice::VramAvail(uint64_t *avail) {
   if (!CpuWait(&page_syncobj_, &value, 1, false))
     return ErrorCode::Unknown;
 
+  const uint64_t total = shared_dev_->VramTotal();
+  if (shared_dev_->IsDgpu() &&
+      Platform::instance().WddmVersion() < KMT_DRIVERVERSION_WDDM_3_1) {
+    if (!dx::QueryVideoMemoryInfoAvailable())
+      return ErrorCode::UnSupported;
+
+    D3DKMT_QUERYVIDEOMEMORYINFO args = {0};
+    args.hAdapter = adapter_;
+    args.MemorySegmentGroup = D3DKMT_MEMORY_SEGMENT_GROUP_LOCAL;
+    args.PhysicalAdapterIndex = shared_dev_->GetChainIndex();
+
+    ErrorCode ret = dx::QueryVideoMemoryInfo(&args);
+    if (ret != ErrorCode::Success)
+      return ret;
+
+    *avail = VramAvailableFromBudget(args.Budget, args.CurrentUsage, total);
+    return ErrorCode::Success;
+  }
+
   uint64_t used = 0;
   ErrorCode ret = shared_dev_->QueryVramUsage(&used);
   if (ret != ErrorCode::Success)
     return ret;
 
-  const uint64_t total = shared_dev_->VramTotal();
   *avail = used >= total ? 0 : total - used;
   return ErrorCode::Success;
 }
