@@ -1,4 +1,8 @@
 # AMD ROCDXG Libary
+
+> [!CAUTION]
+> This repository is deprecated. The source for librocdxg is now in [ROCm/rocm-systems/projects/rocr-runtime/libhsakmt/src/dxg](https://github.com/ROCm/rocm-systems/tree/develop/projects/rocr-runtime/libhsakmt/src/dxg). Please direct all new issues and PRs to rocm-systems instead.
+
 A user-mode library that enables ROCm functionality on Windows Subsystem for Linux (WSL). This library allows users to run GPU-accelerated Linux workloads under WSL, supporting AI, HPC, and other experimental use cases.
 
 ## Prerequisites
